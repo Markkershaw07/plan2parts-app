@@ -14,6 +14,14 @@ const CONFIDENCE_STYLE: Record<string, string> = {
   low: 'bg-red-900 text-red-300',
 };
 
+function matchTemplate(colour: string, templates: import('@/types').TrapezTemplate[]): string {
+  const c = colour.toLowerCase();
+  const match = templates.find(t =>
+    t.name.toLowerCase().split(/[\s\-]+/).some(w => c.includes(w) || w.includes(c))
+  );
+  return match?.id ?? templates[0]?.id ?? '';
+}
+
 export default function TakeoffPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -25,9 +33,47 @@ export default function TakeoffPage() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [result, setResult] = useState<ClaudeAnalysisResult | null>(null);
   const [draft, setDraft] = useState<TraySystem[]>([]);
+  const [ignored, setIgnored] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setHydrated(true); }, []);
+
+  // Bug 1: restore analysis result from persisted raw after hydration
+  useEffect(() => {
+    if (!hydrated) return;
+    const j = jobs.find(j => j.id === params.id);
+    if (!j || result !== null) return;
+    if (j.analysis_raw) {
+      try {
+        const parsed: ClaudeAnalysisResult = JSON.parse(j.analysis_raw);
+        setResult(parsed);
+        if (j.systems.length > 0) {
+          setDraft(j.systems);
+        } else {
+          setDraft(parsed.systems.map(s => ({
+            id: `sys_${uid()}`,
+            name: s.description || s.colour,
+            colour: '#6b7280',
+            template_id: matchTemplate(s.colour, templates),
+            total_length_m: s.total_length_m ?? 0,
+            trapeze_count: s.trapeze_count,
+            corner_count: s.corner_count,
+            tee_count: s.tee_count,
+            reducer_count: s.reducer_count,
+            confidence: s.confidence,
+          })));
+        }
+      } catch { /* malformed raw — ignore */ }
+    }
+  }, [hydrated, params.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function toggleIgnore(id: string) {
+    setIgnored(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   const job = hydrated ? jobs.find((j) => j.id === params.id) : undefined;
   if (!hydrated) return null;
@@ -85,11 +131,12 @@ export default function TakeoffPage() {
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const data: ClaudeAnalysisResult = await res.json();
       setResult(data);
+      updateJob(params.id, { analysis_raw: JSON.stringify(data) });
       const systems: TraySystem[] = data.systems.map((s) => ({
         id: `sys_${uid()}`,
         name: s.description || s.colour,
         colour: '#6b7280',
-        template_id: templates[0]?.id ?? '',
+        template_id: matchTemplate(s.colour, templates),
         total_length_m: s.total_length_m ?? 0,
         trapeze_count: s.trapeze_count,
         corner_count: s.corner_count,
@@ -111,8 +158,8 @@ export default function TakeoffPage() {
   }
 
   function saveToJob() {
-    updateJob(params.id, { systems: draft });
-    router.push(`/jobs/${params.id}/setup`);
+    updateJob(params.id, { systems: draft.filter(s => !ignored.has(s.id)) });
+    router.push(`/jobs/${params.id}/bom`);
   }
 
   const hasPages = job.plan_pages.length > 0;
@@ -154,7 +201,7 @@ export default function TakeoffPage() {
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-white">Detected Systems ({draft.length})</h3>
             <button onClick={saveToJob} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold py-2 px-5 rounded-lg text-sm">
-              Save to Job
+              Confirm &amp; View BOM
             </button>
           </div>
 
@@ -167,7 +214,7 @@ export default function TakeoffPage() {
           {draft.map((sys) => {
             const raw = result.systems.find((_, i) => draft[i]?.id === sys.id) ?? result.systems[0];
             return (
-              <div key={sys.id} className="rounded-xl bg-slate-800 border border-slate-700 p-5 space-y-4">
+              <div key={sys.id} className={`rounded-xl bg-slate-800 border border-slate-700 p-5 space-y-4 ${ignored.has(sys.id) ? 'opacity-40' : ''}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-medium text-slate-300 capitalize">{raw?.colour ?? 'unknown'} system</span>
@@ -175,11 +222,19 @@ export default function TakeoffPage() {
                       {sys.confidence}
                     </span>
                   </div>
-                  <select value={sys.template_id} onChange={(e) => updateDraft(sys.id, { template_id: e.target.value })}
-                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm">
-                    <option value="">-- No template --</option>
-                    {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => toggleIgnore(sys.id)}
+                      className={`text-xs px-2 py-1 rounded ${ignored.has(sys.id) ? 'bg-slate-600 text-slate-400' : 'bg-slate-700 text-white'}`}>
+                      {ignored.has(sys.id) ? 'Ignored' : 'Include'}
+                    </button>
+                    {!ignored.has(sys.id) && (
+                      <select value={sys.template_id} onChange={(e) => updateDraft(sys.id, { template_id: e.target.value })}
+                        className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm">
+                        <option value="">-- No template --</option>
+                        {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs text-slate-400 block mb-1">System name</label>
@@ -202,7 +257,7 @@ export default function TakeoffPage() {
 
           <div className="flex justify-end pt-2">
             <button onClick={saveToJob} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold py-3 px-6 rounded-lg">
-              Save to Job
+              Confirm &amp; View BOM
             </button>
           </div>
         </div>

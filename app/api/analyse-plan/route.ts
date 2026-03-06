@@ -71,7 +71,8 @@ Respond ONLY with valid JSON matching this exact structure:
 
     return NextResponse.json(result);
   } catch (err) {
-    console.error('analyse-plan error:', err);
-    return NextResponse.json({ error: 'Analysis failed' }, { status: 500 });
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('analyse-plan error:', message);
+    return NextResponse.json({ error: 'Analysis failed', detail: message }, { status: 500 });
   }
 }

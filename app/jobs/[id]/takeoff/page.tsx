@@ -128,7 +128,10 @@ export default function TakeoffPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageBase64, mimeType }),
       });
-      if (!res.ok) throw new Error(`API error ${res.status}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(`API error ${res.status}: ${body.detail ?? body.error ?? 'unknown'}`);
+      }
       const data: ClaudeAnalysisResult = await res.json();
       setResult(data);
       updateJob(params.id, { analysis_raw: JSON.stringify(data) });
@@ -146,7 +149,8 @@ export default function TakeoffPage() {
       }));
       setDraft(systems);
     } catch (err) {
-      setAnalysisError('Analysis failed. Check your API key or try again.');
+      const msg = err instanceof Error ? err.message : String(err);
+      setAnalysisError(`Analysis failed: ${msg}`);
       console.error(err);
     } finally {
       setAnalysing(false);

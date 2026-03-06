@@ -70,8 +70,6 @@ export default function SetupPage() {
     }
   }
 
-  function num(val: string) { return parseFloat(val) || 0; }
-
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 space-y-4">
       <div className="flex items-center justify-between mb-6">
@@ -86,7 +84,7 @@ export default function SetupPage() {
 
       {job.systems.length === 0 && !showForm && (
         <div className="text-center py-16 text-slate-400 rounded-xl bg-slate-800 border border-slate-700">
-          <p className="mb-4">No systems yet. Add one manually or analyse a plan in the Plan tab.</p>
+          <p className="mb-4">No systems yet. Add one or analyse a plan in the Plan tab.</p>
           <button onClick={openNew} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold py-2 px-4 rounded-lg text-sm">Add System</button>
         </div>
       )}
@@ -101,7 +99,7 @@ export default function SetupPage() {
                 <div>
                   <p className="font-semibold">{sys.name}</p>
                   <p className="text-sm text-slate-400 mt-0.5">
-                    {tpl ? tpl.name : 'No template'} | {sys.total_length_m}m | {sys.trapeze_count} trapezes | {sys.corner_count} corners | {sys.tee_count} tees | {sys.reducer_count} reducers
+                    {tpl ? tpl.name : 'No template'} | {sys.confidence} confidence
                   </p>
                 </div>
               </div>
@@ -142,17 +140,7 @@ export default function SetupPage() {
               ))}
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            {([['total_length_m','Length (m)'],['trapeze_count','Trapezes'],['corner_count','Corners'],['tee_count','Tees'],['reducer_count','Reducers']] as const).map(([field, label]) => (
-              <div key={field}>
-                <label className="text-sm text-slate-400 block mb-1">{label}</label>
-                <input type="number" min={0} step={field === 'total_length_m' ? 0.5 : 1}
-                  value={form[field]}
-                  onChange={(e) => setForm((f) => ({ ...f, [field]: num(e.target.value) }))}
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm w-full" />
-              </div>
-            ))}
-          </div>
+
           <div className="flex gap-3 pt-2">
             <button onClick={saveSystem} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold py-3 px-5 rounded-lg">Save</button>
             <button onClick={() => { setShowForm(false); setEditingId(null); }} className="bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 px-5 rounded-lg">Cancel</button>

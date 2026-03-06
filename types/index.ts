@@ -10,9 +10,9 @@ export interface AssemblyItem {
 export interface TrapezTemplate {
   id: string
   name: string
-  stick_length_m: number
   per_trapeze: AssemblyItem[]
-  per_join: AssemblyItem[]
+  per_section: AssemblyItem[]   // per 3m tray length (joins + tray itself)
+  per_corner: AssemblyItem[]    // per corner/bend
 }
 
 export interface TraySystem {

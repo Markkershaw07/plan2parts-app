@@ -5,13 +5,15 @@ import Link from 'next/link';
 import { useAppStore } from '@/lib/store';
 import type { AssemblyItem, TrapezTemplate } from '@/types';
 
+type SectionKey = 'per_trapeze' | 'per_section' | 'per_corner';
+
 function uid() { return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`; }
 
 const emptyForm = () => ({
   name: '',
-  stick_length_m: 3,
   per_trapeze: [] as AssemblyItem[],
-  per_join: [] as AssemblyItem[],
+  per_section: [] as AssemblyItem[],
+  per_corner: [] as AssemblyItem[],
 });
 
 export default function TemplatesPage() {
@@ -24,7 +26,12 @@ export default function TemplatesPage() {
 
   function openEdit(t: TrapezTemplate) {
     setEditing(t.id);
-    setForm({ name: t.name, stick_length_m: t.stick_length_m, per_trapeze: [...t.per_trapeze], per_join: [...t.per_join] });
+    setForm({
+      name: t.name,
+      per_trapeze: [...t.per_trapeze],
+      per_section: [...(t.per_section ?? [])],
+      per_corner: [...(t.per_corner ?? [])],
+    });
     setShowForm(true);
   }
 
@@ -36,20 +43,44 @@ export default function TemplatesPage() {
     closeForm();
   }
 
-  function addRow(section: 'per_trapeze' | 'per_join') {
+  function addRow(section: SectionKey) {
     setForm((f) => ({ ...f, [section]: [...f[section], { id: uid(), name: '', qty: 1, unit: 'each' as const }] }));
   }
 
-  function updateRow(section: 'per_trapeze' | 'per_join', id: string, patch: Partial<AssemblyItem>) {
+  function updateRow(section: SectionKey, id: string, patch: Partial<AssemblyItem>) {
     setForm((f) => ({ ...f, [section]: f[section].map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
   }
 
-  function removeRow(section: 'per_trapeze' | 'per_join', id: string) {
+  function removeRow(section: SectionKey, id: string) {
     setForm((f) => ({ ...f, [section]: f[section].filter((r) => r.id !== id) }));
   }
 
   function handleDelete(id: string) {
     if (window.confirm('Delete this template?')) deleteTemplate(id);
+  }
+
+  function ItemRows({ section, hint }: { section: SectionKey; hint?: string }) {
+    return (
+      <div className="space-y-2">
+        {hint && <p className="text-xs text-slate-500 mb-2">{hint}</p>}
+        {form[section].map((row) => (
+          <div key={row.id} className="flex gap-2 items-center">
+            <input value={row.name} onChange={(e) => updateRow(section, row.id, { name: e.target.value })}
+              placeholder="Item name" className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm flex-1" />
+            <input type="number" value={row.qty} min={0} step={0.1}
+              onChange={(e) => updateRow(section, row.id, { qty: parseFloat(e.target.value) || 0 })}
+              className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm w-20" />
+            <select value={row.unit} onChange={(e) => updateRow(section, row.id, { unit: e.target.value as 'each' | 'm' })}
+              className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm w-24">
+              <option value="each">each</option>
+              <option value="m">m</option>
+            </select>
+            <button onClick={() => removeRow(section, row.id)} className="text-slate-400 hover:text-red-400 text-xl px-1">x</button>
+          </div>
+        ))}
+        <button onClick={() => addRow(section)} className="text-amber-400 hover:text-amber-300 text-sm mt-1">+ Add item</button>
+      </div>
+    );
   }
 
   return (
@@ -82,7 +113,9 @@ export default function TemplatesPage() {
               <div>
                 <p className="font-semibold">{t.name}</p>
                 <p className="text-sm text-slate-400 mt-1">
-                  Stick: {t.stick_length_m}m | {t.per_trapeze.length} trapeze items | {t.per_join.length} join items
+                  {t.per_trapeze.length} trapeze item{t.per_trapeze.length !== 1 ? 's' : ''} &middot;{' '}
+                  {(t.per_section ?? []).length} section item{(t.per_section ?? []).length !== 1 ? 's' : ''} &middot;{' '}
+                  {(t.per_corner ?? []).length} corner item{(t.per_corner ?? []).length !== 1 ? 's' : ''}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -97,47 +130,28 @@ export default function TemplatesPage() {
           <div className="rounded-xl bg-slate-800 border border-amber-500 p-6 space-y-6">
             <h2 className="text-base font-semibold">{editing ? 'Edit Template' : 'New Template'}</h2>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-semibold uppercase tracking-wider text-slate-400 block mb-2">Template Name</label>
-                <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white text-base w-full" placeholder="e.g. 75mm MGBT" />
-              </div>
-              <div>
-                <label className="text-sm font-semibold uppercase tracking-wider text-slate-400 block mb-2">Stick Length (m)</label>
-                <input type="number" value={form.stick_length_m} min={1} step={0.5}
-                  onChange={(e) => setForm((f) => ({ ...f, stick_length_m: parseFloat(e.target.value) || 3 }))}
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white text-base w-full" />
-              </div>
+            <div>
+              <label className="text-sm font-semibold uppercase tracking-wider text-slate-400 block mb-2">Template Name</label>
+              <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white text-base w-full" placeholder="e.g. Nema Tray - Orange" />
             </div>
 
-            {(['per_trapeze', 'per_join'] as const).map((section) => (
-              <div key={section}>
-                <label className="text-sm font-semibold uppercase tracking-wider text-slate-400 block mb-3">
-                  {section === 'per_trapeze' ? 'Items per Trapeze' : 'Items per Join'}
-                </label>
-                <div className="space-y-2">
-                  {form[section].map((row) => (
-                    <div key={row.id} className="flex gap-2 items-center">
-                      <input value={row.name} onChange={(e) => updateRow(section, row.id, { name: e.target.value })}
-                        placeholder="Item name" className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm flex-1" />
-                      <input type="number" value={row.qty} min={0} step={0.5}
-                        onChange={(e) => updateRow(section, row.id, { qty: parseFloat(e.target.value) || 1 })}
-                        className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm w-20" />
-                      <select value={row.unit} onChange={(e) => updateRow(section, row.id, { unit: e.target.value as 'each' | 'm' })}
-                        className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm w-24">
-                        <option value="each">each</option>
-                        <option value="m">m</option>
-                      </select>
-                      <button onClick={() => removeRow(section, row.id)} className="text-slate-400 hover:text-red-400 text-xl px-1">x</button>
-                    </div>
-                  ))}
-                  <button onClick={() => addRow(section)} className="text-amber-400 hover:text-amber-300 text-sm mt-1">+ Add item</button>
-                </div>
-              </div>
-            ))}
+            <div className="border-t border-slate-700 pt-5">
+              <label className="text-sm font-semibold uppercase tracking-wider text-amber-400 block mb-3">Per Trapeze (hanger assembly)</label>
+              <ItemRows section="per_trapeze" />
+            </div>
 
-            <div className="flex gap-3 pt-2">
+            <div className="border-t border-slate-700 pt-5">
+              <label className="text-sm font-semibold uppercase tracking-wider text-amber-400 block mb-3">Per 3m Section (joining hardware)</label>
+              <ItemRows section="per_section" hint="Filled for every 3m tray length — include the tray itself, joining plates, splice bolts, etc." />
+            </div>
+
+            <div className="border-t border-slate-700 pt-5">
+              <label className="text-sm font-semibold uppercase tracking-wider text-amber-400 block mb-3">Per Corner / Bend</label>
+              <ItemRows section="per_corner" hint="Filled for each 90° corner counted on the plan." />
+            </div>
+
+            <div className="flex gap-3 pt-2 border-t border-slate-700">
               <button onClick={saveForm} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold py-3 px-5 rounded-lg">
                 Save Template
               </button>
